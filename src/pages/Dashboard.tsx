@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Globe, Settings, Copy, Check } from "lucide-react";
 import Header from "@/components/Header";
+import WorkflowManager from "@/components/WorkflowManager";
+import ConnectionConfig from "@/components/ConnectionConfig";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -17,10 +19,23 @@ const Dashboard = () => {
       name: "My Website",
       url: "https://mywebsite.com",
       status: "connected",
-      lastSync: "2 minutes ago"
+      lastSync: "2 minutes ago",
+      events: 1234,
+      uptime: "99.9%"
+    },
+    {
+      id: 2,
+      name: "E-commerce Store",
+      url: "https://shop.example.com",
+      status: "connected",
+      lastSync: "5 minutes ago",
+      events: 567,
+      uptime: "98.5%"
     }
   ]);
   const [copied, setCopied] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<any>(null);
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -41,6 +56,20 @@ const Dashboard = () => {
     }
   };
 
+  const handleConfigure = (connection: any) => {
+    setSelectedConnection(connection);
+    setIsConfigOpen(true);
+  };
+
+  const sendTestWebhook = async (connectionId: number) => {
+    toast.success("Test webhook sent successfully!");
+    
+    // Simulate API call
+    setTimeout(() => {
+      toast.success("Webhook received and processed!");
+    }, 1500);
+  };
+
   if (!user) return null;
 
   return (
@@ -55,8 +84,8 @@ const Dashboard = () => {
         <Tabs defaultValue="connections" className="space-y-6">
           <TabsList>
             <TabsTrigger value="connections">Connections</TabsTrigger>
-            <TabsTrigger value="api">API Settings</TabsTrigger>
             <TabsTrigger value="workflows">Workflows</TabsTrigger>
+            <TabsTrigger value="api">API Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="connections" className="space-y-6">
@@ -70,7 +99,7 @@ const Dashboard = () => {
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {connections.map((connection) => (
-                <Card key={connection.id}>
+                <Card key={connection.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <Globe className="h-8 w-8 text-blue-600" />
@@ -81,16 +110,45 @@ const Dashboard = () => {
                     <CardTitle>{connection.name}</CardTitle>
                     <CardDescription>{connection.url}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 mb-4">Last sync: {connection.lastSync}</p>
-                    <Button variant="outline" size="sm">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Configure
-                    </Button>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-700">Events:</span>
+                        <p className="text-gray-600">{connection.events}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Uptime:</span>
+                        <p className="text-gray-600">{connection.uptime}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-600">Last sync: {connection.lastSync}</p>
+                    
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleConfigure(connection)}
+                      >
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => sendTestWebhook(connection.id)}
+                      >
+                        Test
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="workflows">
+            <WorkflowManager />
           </TabsContent>
 
           <TabsContent value="api" className="space-y-6">
@@ -130,21 +188,36 @@ const Dashboard = () => {
                     <li>4. Start sending events to trigger workflows</li>
                   </ol>
                 </div>
+
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <h4 className="font-medium text-yellow-900 mb-2">Example Webhook Request:</h4>
+                  <pre className="text-sm text-yellow-800 bg-yellow-100 p-3 rounded overflow-x-auto">
+{`curl -X POST https://api.n8n-webflow.com/webhook \\
+  -H "Authorization: Bearer ${user.apiKey}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "event": "user_signup",
+    "data": {
+      "email": "user@example.com",
+      "name": "John Doe"
+    }
+  }'`}
+                  </pre>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="workflows" className="space-y-6">
-            <div className="text-center py-12">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No workflows yet</h3>
-              <p className="text-gray-600 mb-6">Create your first workflow to start automating</p>
-              <Button className="bg-gradient-to-r from-purple-600 to-blue-600">
-                Create Workflow
-              </Button>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
+
+      <ConnectionConfig 
+        connection={selectedConnection}
+        isOpen={isConfigOpen}
+        onClose={() => {
+          setIsConfigOpen(false);
+          setSelectedConnection(null);
+        }}
+      />
     </div>
   );
 };
