@@ -47,6 +47,7 @@ const WorkflowManager = () => {
   ]);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newWorkflow, setNewWorkflow] = useState({
     name: '',
     description: '',
@@ -54,48 +55,155 @@ const WorkflowManager = () => {
     action: ''
   });
 
-  const handleCreateWorkflow = () => {
+  const handleCreateWorkflow = async () => {
     if (!newWorkflow.name || !newWorkflow.trigger || !newWorkflow.action) {
       toast.error("Please fill in all required fields");
       return;
     }
 
-    const workflow: Workflow = {
-      id: Date.now().toString(),
-      name: newWorkflow.name,
-      description: newWorkflow.description,
-      trigger: newWorkflow.trigger,
-      action: newWorkflow.action,
-      status: 'active',
-      executions: 0,
-      lastRun: 'Never'
-    };
+    setIsSubmitting(true);
+    console.log("Creating workflow:", newWorkflow);
 
-    setWorkflows([...workflows, workflow]);
-    setNewWorkflow({ name: '', description: '', trigger: '', action: '' });
-    setIsCreateOpen(false);
-    toast.success("Workflow created successfully!");
+    try {
+      const response = await fetch('/api/workflows', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...newWorkflow,
+          userId: localStorage.getItem('userId') || 'demo-user',
+          timestamp: new Date().toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        const createdWorkflow = await response.json();
+        
+        const workflow: Workflow = {
+          id: createdWorkflow.id || Date.now().toString(),
+          name: newWorkflow.name,
+          description: newWorkflow.description,
+          trigger: newWorkflow.trigger,
+          action: newWorkflow.action,
+          status: 'active',
+          executions: 0,
+          lastRun: 'Never'
+        };
+
+        setWorkflows([...workflows, workflow]);
+        setNewWorkflow({ name: '', description: '', trigger: '', action: '' });
+        setIsCreateOpen(false);
+        toast.success("Workflow created successfully!");
+      } else {
+        throw new Error('Failed to create workflow');
+      }
+    } catch (error) {
+      console.error("Error creating workflow:", error);
+      toast.error("Failed to create workflow. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const toggleWorkflowStatus = (id: string) => {
-    setWorkflows(workflows.map(w => 
-      w.id === id 
-        ? { ...w, status: w.status === 'active' ? 'paused' : 'active' }
-        : w
-    ));
-    toast.success("Workflow status updated!");
+  const toggleWorkflowStatus = async (id: string) => {
+    const workflow = workflows.find(w => w.id === id);
+    if (!workflow) return;
+
+    const newStatus = workflow.status === 'active' ? 'paused' : 'active';
+
+    try {
+      const response = await fetch(`/api/workflows/${id}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          userId: localStorage.getItem('userId') || 'demo-user',
+          timestamp: new Date().toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        setWorkflows(workflows.map(w => 
+          w.id === id 
+            ? { ...w, status: newStatus }
+            : w
+        ));
+        toast.success(`Workflow ${newStatus === 'active' ? 'activated' : 'paused'} successfully!`);
+      } else {
+        throw new Error('Failed to update workflow status');
+      }
+    } catch (error) {
+      console.error("Error updating workflow status:", error);
+      toast.error("Failed to update workflow status.");
+    }
   };
 
-  const deleteWorkflow = (id: string) => {
-    setWorkflows(workflows.filter(w => w.id !== id));
-    toast.success("Workflow deleted successfully!");
+  const deleteWorkflow = async (id: string) => {
+    try {
+      const response = await fetch(`/api/workflows/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: localStorage.getItem('userId') || 'demo-user',
+          timestamp: new Date().toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        setWorkflows(workflows.filter(w => w.id !== id));
+        toast.success("Workflow deleted successfully!");
+      } else {
+        throw new Error('Failed to delete workflow');
+      }
+    } catch (error) {
+      console.error("Error deleting workflow:", error);
+      toast.error("Failed to delete workflow.");
+    }
   };
 
-  const testWorkflow = (workflow: Workflow) => {
-    toast.success(`Testing workflow: ${workflow.name}`);
-    setTimeout(() => {
-      toast.success("Test completed successfully!");
-    }, 2000);
+  const testWorkflow = async (workflow: Workflow) => {
+    try {
+      const response = await fetch(`/api/workflows/${workflow.id}/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          workflowId: workflow.id,
+          testData: {
+            trigger: workflow.trigger,
+            action: workflow.action
+          },
+          userId: localStorage.getItem('userId') || 'demo-user',
+          timestamp: new Date().toISOString()
+        }),
+      });
+
+      if (response.ok) {
+        toast.success(`Testing workflow: ${workflow.name}`);
+        
+        // Update execution count
+        setWorkflows(workflows.map(w => 
+          w.id === workflow.id 
+            ? { ...w, executions: w.executions + 1, lastRun: 'Just now' }
+            : w
+        ));
+
+        setTimeout(() => {
+          toast.success("Test completed successfully!");
+        }, 2000);
+      } else {
+        throw new Error('Test failed');
+      }
+    } catch (error) {
+      console.error("Error testing workflow:", error);
+      toast.error("Test failed. Please try again.");
+    }
   };
 
   return (
@@ -171,8 +279,12 @@ const WorkflowManager = () => {
               </div>
               
               <div className="flex gap-3">
-                <Button onClick={handleCreateWorkflow} className="flex-1">
-                  Create Workflow
+                <Button 
+                  onClick={handleCreateWorkflow} 
+                  disabled={isSubmitting}
+                  className="flex-1"
+                >
+                  {isSubmitting ? "Creating..." : "Create Workflow"}
                 </Button>
                 <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                   Cancel
